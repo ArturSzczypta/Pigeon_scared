@@ -1,37 +1,45 @@
 import tensorflow as tf
 import numpy as np
 from PIL import Image
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications.resnet_v2 import ResNet50V2, decode_predictions
+import os
+import csv
 
+# Load the ResNet50V2 model
+model = ResNet50V2(weights='imagenet')
+def image_recognition(img_folder, img_name):
+    # Load and preprocess the image
+    img_path = os.path.join(img_folder, img_name)
+    img = image.load_img(img_path, target_size=(224, 224))
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    x = tf.keras.applications.resnet_v2.preprocess_input(x)
 
-# Load the TFLite model and allocate tensors.
-interpreter = tf.lite.Interpreter(model_path="inception_v3_1_default_1.tflite")
-interpreter.allocate_tensors()
+    # Make predictions
+    preds = model.predict(x)
+    decoded_preds = decode_predictions(preds, top=5)[0]
 
-# Get input and output tensors.
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+    # return top 5 predictions as a list
+    result = []
+    for pred in decoded_preds:
+        result.append([img_name, pred[1], pred[2]])
+    return result
 
-# Load and preprocess the image.
-image = Image.open("pigeon-sample_1.jpg").resize((299, 299))
-image = np.array(image).astype('float32') / 255.0
-image = np.expand_dims(image, axis=0)
+# Get the full path of the 'pictures' folder
+folder_path = os.path.join(os.getcwd(), 'samples')
+balcony_path = os.path.join(folder_path, 'Balcony')
+pigeons_path = os.path.join(folder_path, 'Pigeons')
+humans_path = os.path.join(folder_path, 'Humans')
+google_path = os.path.join(folder_path, 'Google')
 
-# Set the input tensor.
-interpreter.set_tensor(input_details[0]['index'], image)
+with open('google_pred.csv', 'a', newline='', encoding = 'utf-8') as file:
+    writer = csv.writer(file)
 
-# Run the model.
-interpreter.invoke()
+    # write the header row to the CSV file
+    writer.writerow(['Image', 'Prediction', 'Probability'])
 
-# Get the output tensor and print the top 3 predictions.
-output_data = interpreter.get_tensor(output_details[0]['index'])
-top_k = np.argsort(output_data[0])[::-1][:3]
-print("Top 3 predictions:", top_k)
-
-# GitHub yrevar/imagenet1000_clsidx_to_labels.txt
-with open('imagenet1000_clsidx_to_labels.txt', 'r') as f:
-    labels = [line.strip() for line in f.readlines()]
-
-class_dict = dict(zip(np.arange(len(labels)), labels))
-
-for i in top_k:
-    print(class_dict[i])
+    for filename in os.listdir(google_path):
+        prediction = image_recognition(google_path, filename)
+        for pred in prediction:
+            writer.writerow(pred)
